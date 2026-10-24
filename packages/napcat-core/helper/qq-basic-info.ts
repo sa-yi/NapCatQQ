@@ -78,6 +78,16 @@ export class QQBasicInfoWrapper {
   }
 
   getAppidV2 (): { appid: string; qua: string; } {
+    const envAppid = process.env['NAPCAT_QQ_APPID']?.trim() || process.env['NAPCAT_APPID']?.trim();
+    const envQua = process.env['NAPCAT_QQ_QUA']?.trim() || process.env['NAPCAT_QUA']?.trim();
+    if (envAppid || envQua) {
+      this.context.logger.log('[QQ版本兼容性检测] 已应用环境变量覆盖，优先使用自定义 QQ AppID / QUA');
+      return {
+        appid: envAppid || this.getAppIdFallback(),
+        qua: envQua || this.getQUAFallback(),
+      };
+    }
+
     // 通过已有表 性能好
     const appidTable = AppidTable as unknown as QQAppidTableType;
     const fullVersion = this.getFullQQVersion();

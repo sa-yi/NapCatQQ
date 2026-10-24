@@ -17,6 +17,16 @@ export const BypassOptionsSchema = Type.Object({
   js: Type.Boolean({ default: true }),
 });
 
+export const AntiDetectionConfigSchema = Type.Object({
+  enabled: Type.Boolean({ default: true }),
+  machineGuid: Type.Optional(Type.String()),
+  deviceName: Type.Optional(Type.String()),
+  deviceType: Type.Optional(Type.String()),
+  appid: Type.Optional(Type.String()),
+  qua: Type.Optional(Type.String()),
+  guidSeed: Type.Optional(Type.String()),
+});
+
 export const NapcatConfigSchema = Type.Object({
   fileLog: Type.Boolean({ default: false }),
   consoleLog: Type.Boolean({ default: true }),
@@ -27,6 +37,7 @@ export const NapcatConfigSchema = Type.Object({
   o3HookMode: Type.Number({ default: 0 }),
   autoTimeSync: Type.Boolean({ default: true }),
   bypass: Type.Optional(BypassOptionsSchema),
+  antiDetect: Type.Optional(AntiDetectionConfigSchema),
 });
 
 export type NapcatConfig = Static<typeof NapcatConfigSchema>;

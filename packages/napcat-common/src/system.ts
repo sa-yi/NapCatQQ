@@ -38,4 +38,4 @@ export const cpuArch = os.arch();
 export const systemVersion = os.release();
 export const hostname = osName;
 export const downloadsPath = path.join(homeDir, 'Downloads');
-export const systemName = os.type();
+export const systemName = process.env['NAPCAT_DEVICE_TYPE']?.trim() || os.type();
