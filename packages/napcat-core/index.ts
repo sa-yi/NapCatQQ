@@ -33,8 +33,6 @@ function dlopenWrapper (wrapperPath: string): WrapperNodeApi {
   try {
     process.dlopen(nativemodule, wrapperPath);
   } catch (error) {
-    // QQNT.dll 依赖媒体基础（mfplat.dll 等），Windows Server 默认不装这个组件。
-    // 缺了它系统只会报 The specified module could not be found，看不出缺的是什么
     const mfplatPath = path.join(process.env['SystemRoot'] || 'C:\\Windows', 'System32', 'mfplat.dll');
     if (os.platform() === 'win32' && !fs.existsSync(mfplatPath)) {
       throw new Error(
@@ -68,7 +66,6 @@ export function loadQQWrapper (execPath: string | undefined, QQVersion: string):
   if (!fs.existsSync(wrapperNodePath)) {
     wrapperNodePath = path.join(appPath, './resources/app/wrapper.node');
   }
-  // 老版本兼容 未来去掉
   if (!fs.existsSync(wrapperNodePath)) {
     wrapperNodePath = path.join(path.dirname(execPath), `./resources/app/versions/${QQVersion}/wrapper.node`);
   }
@@ -76,8 +73,8 @@ export function loadQQWrapper (execPath: string | undefined, QQVersion: string):
   process.env['NAPCAT_WRAPPER_PATH'] = wrapperNodePath;
   return exports;
 }
+
 export function getMajorPath (execPath: string, QQVersion: string): string {
-  // major.node
   let appPath;
   if (os.platform() === 'darwin') {
     appPath = path.resolve(path.dirname(execPath), '../Resources/app');
@@ -90,12 +87,37 @@ export function getMajorPath (execPath: string, QQVersion: string): string {
   if (!fs.existsSync(majorPath)) {
     majorPath = path.join(appPath, './resources/app/major.node');
   }
-  // 老版本兼容 未来去掉
   if (!fs.existsSync(majorPath)) {
     majorPath = path.join(path.dirname(execPath), `./resources/app/versions/${QQVersion}/major.node`);
   }
   return majorPath;
 }
+
+function buildCommonDeviceInfo (guid: string, qqVersion: string) {
+  const platform = os.platform();
+  const deviceName = process.env['NAPCAT_DEVICE_NAME']?.trim() || (
+    platform === 'win32' ? `DESKTOP-${stableHash(`${qqVersion}:${guid}`).slice(0, 6)}`
+      : platform === 'darwin' ? 'MacBook-Pro'
+        : 'ubuntu'
+  );
+  const deviceType = process.env['NAPCAT_DEVICE_TYPE']?.trim() || (
+    platform === 'win32' ? 'Windows' : platform === 'darwin' ? 'macOS' : 'Linux'
+  );
+
+  return {
+    guid,
+    buildVer: qqVersion,
+    localId: 2052,
+    devName: deviceName,
+    devType: deviceType,
+    vendorName: '',
+    osVer: systemVersion,
+    vendorOsName: deviceType,
+    setMute: false,
+    vendorType: VendorType.KNOSETONIOS,
+  };
+}
+
 export class NapCatCore {
   readonly context: InstanceContext;
   readonly eventWrapper: NTEventWrapper;
@@ -103,25 +125,17 @@ export class NapCatCore {
   NapCatDataPath: string = '';
   NapCatTempPath: string = '';
   apis: StableNTApiWrapper;
-  // runtime info, not readonly
   selfInfo: SelfInfo;
   util: NodeQQNTWrapperUtil;
   configLoader: NapCatConfigLoader;
-  /** 数据库 passphrase，由 OidbSvcTrpcTcp.0xcde_2 包获取 */
   dbPassphrase: string | undefined;
 
-  // 通过构造器递过去的 runtime info 应该尽量少
   constructor (context: InstanceContext, selfInfo: SelfInfo) {
     this.selfInfo = selfInfo;
-    // 先用原始 session 创建 eventWrapper
     this.eventWrapper = new NTEventWrapper(context.session);
-    // 通过环境变量 NAPCAT_SESSION_PROXY 开启 session 代理
     if (process.env['NAPCAT_SESSION_PROXY'] === '1') {
       const proxiedSession = createSessionProxy(context.session, this.eventWrapper);
-      this.context = {
-        ...context,
-        session: proxiedSession,
-      };
+      this.context = { ...context, session: proxiedSession };
     } else {
       this.context = context;
     }
@@ -145,7 +159,6 @@ export class NapCatCore {
     container.bind(TypedEventEmitter).toConstantValue(this.event);
     ReceiverServiceRegistry.forEach((ServiceClass, serviceName) => {
       container.bind(ServiceClass).toSelf();
-      // console.log(`Registering service handler for: ${serviceName}`);
       this.context.packetHandler.onCmd(serviceName, ({ seq, hex_data }) => {
         const serviceInstance = container.get(ServiceClass);
         return serviceInstance.handler(seq, hex_data);
@@ -157,12 +170,9 @@ export class NapCatCore {
     this.NapCatDataPath = path.join(this.dataPath, 'NapCat');
     fs.mkdirSync(this.NapCatDataPath, { recursive: true });
     this.NapCatTempPath = path.join(this.NapCatDataPath, 'temp');
-    // 创建临时目录
     if (!fs.existsSync(this.NapCatTempPath)) {
       fs.mkdirSync(this.NapCatTempPath, { recursive: true });
     }
-    // 通过 getServerTime 全局 hook Date.now() 矫正本地时间偏差
-    // 可通过环境变量 NAPCAT_DISABLE_TIME_SYNC=1 或配置 autoTimeSync: false 禁用
     if (process.env['NAPCAT_DISABLE_TIME_SYNC'] === '1' || !this.configLoader.configData.autoTimeSync) {
       this.context.logger.log('[ServerTime] 自动对时已禁用');
     } else {
@@ -179,11 +189,9 @@ export class NapCatCore {
         }
       };
       doTimeSync();
-      // 每小时定期重同步，防止长时间运行后本地时钟漂移触发风控
       const syncTimer = setInterval(doTimeSync, 3600000);
       syncTimer.unref();
     }
-    // 遍历this.apis[i].initApi 如果存在该函数进行async 调用
     for (const apiKey in this.apis) {
       const api = this.apis[apiKey as keyof StableNTApiWrapper];
       if ('initApi' in api && typeof api.initApi === 'function') {
@@ -192,12 +200,8 @@ export class NapCatCore {
     }
     this.initNapCatCoreListeners().then().catch((e) => this.context.logger.logError(e));
 
-    this.context.logger.setFileLogEnabled(
-      this.configLoader.configData.fileLog
-    );
-    this.context.logger.setConsoleLogEnabled(
-      this.configLoader.configData.consoleLog
-    );
+    this.context.logger.setFileLogEnabled(this.configLoader.configData.fileLog);
+    this.context.logger.setConsoleLogEnabled(this.configLoader.configData.consoleLog);
     this.context.logger.setFileAndConsoleLogLevel(
       this.configLoader.configData.fileLogLevel as LogLevel,
       this.configLoader.configData.consoleLogLevel as LogLevel
@@ -213,17 +217,12 @@ export class NapCatCore {
     return result;
   }
 
-  // Renamed from 'InitDataListener'
   async initNapCatCoreListeners () {
     const msgListener = new NodeIKernelMsgListener();
-
-    // 在线文件/文件夹消息
     msgListener.onRecvOnlineFileMsg = (msgs: RawMessage[]) => {
       msgs.forEach(msg => this.context.logger.logMessage(msg, this.selfInfo));
     };
-
     msgListener.onKickedOffLine = (Info: KickedOffLineInfo) => {
-      // 下线通知
       const tips = `[KickedOffLine] [${Info.tipsTitle}] ${Info.tipsDesc}`;
       this.context.logger.logError(tips);
       this.selfInfo.online = false;
@@ -247,8 +246,6 @@ export class NapCatCore {
     };
     profileListener.onSelfStatusChanged = (Info: SelfStatusInfo) => {
       if (Info.status === 20) {
-        // 静默离线：服务端判定会话失效，但不会下发 KickedOffLine 通知。
-        // 仅在 在线 -> 离线 的跳变上广播一次，供上层复用下线恢复链路。
         const wasOnline = this.selfInfo.online === true;
         this.selfInfo.online = false;
         this.context.logger.log('账号状态变更为离线');
@@ -281,21 +278,18 @@ export async function genSessionConfig (
     linux: PlatformType.KLINUX,
   };
   const systemPlatform = platformMapping[os.platform()] ?? PlatformType.KWINDOWS;
-  const deviceName = getEffectiveHostname();
-  const deviceType = getEffectiveSystemName();
+  const deviceInfo = buildCommonDeviceInfo(guid, QQVersion);
   return {
     selfUin,
     selfUid,
-    desktopPathConfig: {
-      account_path, // 可以通过NodeQQNTWrapperUtil().getNTUserDataInfoConfig()获取
-    },
+    desktopPathConfig: { account_path },
     clientVer: QQVersion,
     a2: '',
     d2: '',
     d2Key: '',
     machineId: '',
-    platform: systemPlatform,  // 3是Windows?
-    platVer: systemVersion,  // 系统版本号, 应该可以固定
+    platform: systemPlatform,
+    platVer: systemVersion,
     appid: QQVersionAppid,
     rdeliveryConfig: {
       appKey: '',
@@ -313,18 +307,7 @@ export async function genSessionConfig (
       fixedAfterHitKeys: [''],
     },
     defaultFileDownloadPath: downloadPath,
-    deviceInfo: {
-      guid,
-      buildVer: QQVersion,
-      localId: 2052,
-      devName: deviceName,
-      devType: deviceType,
-      vendorName: '',
-      osVer: systemVersion,
-      vendorOsName: deviceType,
-      setMute: false,
-      vendorType: VendorType.KNOSETONIOS,
-    },
+    deviceInfo,
     deviceConfig: '{"appearance":{"isSplitViewMode":true},"msg":{}}',
   };
 }
