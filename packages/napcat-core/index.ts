@@ -1,35 +1,4 @@
-import {
-  NTQQFileApi,
-  NTQQFriendApi,
-  NTQQGroupApi,
-  NTQQMsgApi,
-  NTQQSystemApi,
-  NTQQUserApi,
-  NTQQWebApi,
-  NTQQFlashApi,
-  NTQQOnlineApi,
-  NTQQDatabaseApi,
-} from '@/napcat-core/apis';
-import { NTQQCollectionApi } from '@/napcat-core/apis/collection';
-import {
-  NodeIQQNTWrapperSession,
-  NodeQQNTWrapperUtil,
-  PlatformType,
-  VendorType,
-  WrapperNodeApi,
-  WrapperSessionInitConfig,
-} from '@/napcat-core/wrapper';
-import { LogLevel, LogWrapper } from '@/napcat-core/helper/log';
-import { QQBasicInfoWrapper } from '@/napcat-core/helper/qq-basic-info';
-import { NapCatPathWrapper } from 'napcat-common/src/path';
-import path from 'node:path';
-import fs from 'node:fs';
 import { hostname, systemName, systemVersion } from 'napcat-common/src/system';
-import { NTEventWrapper } from '@/napcat-core/helper/event';
-import { createSessionProxy } from '@/napcat-core/helper/session-proxy';
-import { KickedOffLineInfo, RawMessage, SelfInfo, SelfStatusInfo } from '@/napcat-core/types';
-import { NapCatConfigLoader, NapcatConfigSchema } from '@/napcat-core/helper/config';
-import os from 'node:os';
 import { NodeIKernelMsgListener, NodeIKernelProfileListener } from '@/napcat-core/listeners';
 import { proxiedListenerOf } from '@/napcat-core/helper/proxy-handler';
 import { NTQQPacketApi } from './apis/packet';
@@ -312,6 +281,8 @@ export async function genSessionConfig (
     linux: PlatformType.KLINUX,
   };
   const systemPlatform = platformMapping[os.platform()] ?? PlatformType.KWINDOWS;
+  const deviceName = getEffectiveHostname();
+  const deviceType = getEffectiveSystemName();
   return {
     selfUin,
     selfUid,
@@ -346,11 +317,11 @@ export async function genSessionConfig (
       guid,
       buildVer: QQVersion,
       localId: 2052,
-      devName: hostname,
-      devType: systemName,
+      devName: deviceName,
+      devType: deviceType,
       vendorName: '',
       osVer: systemVersion,
-      vendorOsName: systemName,
+      vendorOsName: deviceType,
       setMute: false,
       vendorType: VendorType.KNOSETONIOS,
     },

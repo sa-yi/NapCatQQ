@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { systemPlatform } from 'napcat-common/src/system';
+import { getEffectiveHostname, getEffectiveSystemName, systemPlatform } from 'napcat-common/src/system';
 import { getDefaultQQVersionConfigInfo, getQQPackageInfoPath, getQQVersionConfigPath, parseAppidFromMajor, parseAppidFromMajorV2 } from 'napcat-common/src/helper';
 import AppidTable from '@/napcat-core/external/appid.json';
 import { LogWrapper } from './log';
